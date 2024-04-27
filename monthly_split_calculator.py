@@ -38,7 +38,7 @@ def get_csv_files(csv_dir, filter='.csv'):
     Returns:
     csv_files : list of absolute filepaths for each file found in csv_dir
     '''
-    csv_files = [join(csv_dir, xx) for xx in listdir(csv_dir) if filter in xx]
+    csv_files = [join(csv_dir, xx) for xx in listdir(csv_dir) if (filter in xx) or (filter.upper() in xx)] 
     return csv_files
 
 def category_totals(data):
