@@ -119,7 +119,7 @@ if __name__ == '__main__':
         # Test case
         print('Running Test Case:')
         # csv_directory = 'E:\\Personal\\Finance\\Credit Card Reports\\2023-05'
-        csv_directory = "E:\\Finance\\Expense Tracking\\2024\\2024-03"
+        csv_directory = "E:\\Finance\\Expense Tracking\\2024\\2024-04"
         csv_files = get_csv_files(csv_directory)
 
     cat_totals = {}
@@ -157,4 +157,8 @@ if __name__ == '__main__':
     print(share)
 
     plot_pie_chart(cat_totals)
+
+    # Plot pie charts for individual contributions as well
+    # plot_pie_chart()
+
     plt.show()
