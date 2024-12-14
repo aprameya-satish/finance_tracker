@@ -4,6 +4,7 @@ from os.path import join
 from os import listdir
 import argparse
 import matplotlib.pyplot as plt
+import json
 
 def csv_subtotals(data: pd.DataFrame):
     
@@ -54,10 +55,10 @@ def category_totals(data):
 
     for category in categories:
         # Using abs is risky if returns are present. Will need to place a check on this.
+        # This should work since the abs is called on the sum-total of all transactions within the sheet.        
         cat_totals[category] = np.abs(data[data['Category'] == category]['Amount'].sum(axis='index'))
 
     return cat_totals
-
 
 def plot_pie_chart(cat_totals):
 
@@ -109,6 +110,11 @@ def plot_pie_chart(cat_totals):
     # plt.legend(legend_list, loc = 'lower right')
     # plt.show()
 
+def parse_amazon_history(csv_filepath):
+    ''' parses amazon purchase history file and returns data table with consolidated purchase history for the date range specified
+    '''
+    pass
+
 if __name__ == '__main__':
 
     args = get_parsed_args()
@@ -119,7 +125,7 @@ if __name__ == '__main__':
         # Test case
         print('Running Test Case:')
         # csv_directory = 'E:\\Personal\\Finance\\Credit Card Reports\\2023-05'
-        csv_directory = "E:\\Finance\\Expense Tracking\\2024\\2024-04"
+        csv_directory = "E:\\Finance\\Expense Tracking\\2024\\2024-05"
         csv_files = get_csv_files(csv_directory)
 
     cat_totals = {}
@@ -136,12 +142,12 @@ if __name__ == '__main__':
         else:
             for category in list(cat_tmp.keys()):
                 if category in list(cat_totals.keys()):
-                    cat_totals[category] += cat_tmp[category]
+                    cat_totals[category] += np.round(cat_tmp[category], 2)
                 else:
-                    cat_totals[category] = cat_tmp[category]
+                    cat_totals[category] = np.round(cat_tmp[category], 2)
 
         print('Category Totals:')
-        print(cat_totals)
+        print(json.dumps(cat_totals, sort_keys=False, indent=4, separators=(',', ':')))
 
         if len(totals) == 0:
             totals = st_tmp
