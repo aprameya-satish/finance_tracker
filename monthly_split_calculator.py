@@ -125,7 +125,7 @@ if __name__ == '__main__':
         # Test case
         print('Running Test Case:')
         # csv_directory = 'E:\\Personal\\Finance\\Credit Card Reports\\2023-05'
-        csv_directory = "E:\\Finance\\Expense Tracking\\2024\\2024-05"
+        csv_directory = "E:\\Finance\\Expense Tracking\\2024\\2025-06"
         csv_files = get_csv_files(csv_directory)
 
     cat_totals = {}
@@ -161,10 +161,22 @@ if __name__ == '__main__':
 
     print('Split:')
     print(share)
+    
+    # run a parity check between share totals and categorical spend to make sure that calculations are consistent
+    total_spend_from_subtotal = 0
+    for subtotal in totals:
+        total_spend_from_subtotal += totals[subtotal]
+
+    total_spend_from_cat = 0
+    for category in cat_totals:
+        total_spend_from_cat += cat_totals[category]
+
+    total_difference = total_spend_from_cat - total_spend_from_subtotal
+    print('RUNNING PARITY CHECK:')
+    if round(total_difference, 2) != 0:
+        print(f'WARNING - There is a {total_difference} USD difference in (category total - split) data. Double check calculations!')
+    else:
+        print('SUCCESS - Confirmed parity between category totals and split totals. No further action needed.')
 
     plot_pie_chart(cat_totals)
-
-    # Plot pie charts for individual contributions as well
-    # plot_pie_chart()
-
     plt.show()
