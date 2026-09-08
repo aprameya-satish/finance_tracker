@@ -3,15 +3,18 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, money, type BudgetRow, type Category } from '../api'
 import MonthPicker from '../components/MonthPicker'
-import { useMonth } from '../useMonth'
+import PendingToggle from '../components/PendingToggle'
+import { pendingQuery, useIncludePending, useMonth } from '../useMonth'
 
 export default function Budgets() {
   const month = useMonth()
-  const [, setParams] = useSearchParams()
+  const [params, setParams] = useSearchParams()
+  const [includePending, setIncludePending] = useIncludePending()
+  const pending = pendingQuery(includePending)
   const qc = useQueryClient()
   const { data: rows = [] } = useQuery({
-    queryKey: ['budgets', month],
-    queryFn: () => api.get<BudgetRow[]>(`/api/budgets/${month}`),
+    queryKey: ['budgets', month, includePending],
+    queryFn: () => api.get<BudgetRow[]>(`/api/budgets/${month}${pending ? `?${pending}` : ''}`),
   })
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
@@ -47,7 +50,15 @@ export default function Budgets() {
           <button className="text-sm text-[var(--muted)]" onClick={() => copy.mutate()}>
             Copy previous month
           </button>
-          <MonthPicker value={month} onChange={(m) => setParams({ month: m })} />
+          <PendingToggle checked={includePending} onChange={setIncludePending} />
+          <MonthPicker
+            value={month}
+            onChange={(m) => {
+              const next = new URLSearchParams(params)
+              next.set('month', m)
+              setParams(next)
+            }}
+          />
         </div>
       </header>
 

@@ -3,14 +3,17 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, money, type MonthReport, type Settings, type Transaction } from '../api'
 import MonthPicker from '../components/MonthPicker'
+import PendingToggle from '../components/PendingToggle'
 import SpendCharts from '../components/SpendCharts'
 import WhoControl from '../components/WhoControl'
 import { downloadMonthPdf, type MonthSeries } from '../reportExport'
-import { useMonth } from '../useMonth'
+import { pendingQuery, useIncludePending, useMonth } from '../useMonth'
 
 export default function Reports() {
   const month = useMonth()
-  const [, setParams] = useSearchParams()
+  const [params, setParams] = useSearchParams()
+  const [includePending, setIncludePending] = useIncludePending()
+  const pending = pendingQuery(includePending)
   const qc = useQueryClient()
   const [pdfBusy, setPdfBusy] = useState(false)
   const { data: settings } = useQuery({
@@ -18,12 +21,12 @@ export default function Reports() {
     queryFn: () => api.get<Settings>('/api/settings'),
   })
   const { data: report } = useQuery({
-    queryKey: ['report', month],
-    queryFn: () => api.get<MonthReport>(`/api/reports/month/${month}`),
+    queryKey: ['report', month, includePending],
+    queryFn: () => api.get<MonthReport>(`/api/reports/month/${month}${pending ? `?${pending}` : ''}`),
   })
   const { data: series } = useQuery({
-    queryKey: ['series', month],
-    queryFn: () => api.get<MonthSeries>(`/api/reports/month/${month}/series`),
+    queryKey: ['series', month, includePending],
+    queryFn: () => api.get<MonthSeries>(`/api/reports/month/${month}/series${pending ? `?${pending}` : ''}`),
   })
   const { data: txns = [] } = useQuery({
     queryKey: ['txns', month, 'report'],
@@ -52,7 +55,7 @@ export default function Reports() {
             onClick={async () => {
               setPdfBusy(true)
               try {
-                await downloadMonthPdf(month)
+                await downloadMonthPdf(month, includePending)
               } finally {
                 setPdfBusy(false)
               }
@@ -60,7 +63,15 @@ export default function Reports() {
           >
             {pdfBusy ? 'Exporting…' : 'Export PDF'}
           </button>
-          <MonthPicker value={month} onChange={(m) => setParams({ month: m })} />
+          <PendingToggle checked={includePending} onChange={setIncludePending} />
+          <MonthPicker
+            value={month}
+            onChange={(m) => {
+              const next = new URLSearchParams(params)
+              next.set('month', m)
+              setParams(next)
+            }}
+          />
         </div>
       </header>
 

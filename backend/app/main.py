@@ -7,8 +7,11 @@ from app.db.engine import SessionLocal, init_db
 
 app = FastAPI(title="Finance Tracker", version="0.1.0")
 app_settings = get_settings()
-_origins = app_settings.cors_origin_list
-_allow_all = "*" in _origins or not _origins
+_origins = app_settings.cors_origin_list or [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+_allow_all = "*" in _origins
 
 app.add_middleware(
     CORSMiddleware,

@@ -6,12 +6,20 @@ import MonthPicker from '../components/MonthPicker'
 import WhoControl from '../components/WhoControl'
 import { useMonth } from '../useMonth'
 
-function txnQuery(month: string, who: string, q: string, accountId: string, review = false) {
+function txnQuery(
+  month: string,
+  who: string,
+  q: string,
+  accountId: string,
+  categoryId: string,
+  review = false,
+) {
   const p = new URLSearchParams()
   if (month) p.set('year_month', month)
   if (who) p.set('who', who)
   if (q) p.set('q', q)
   if (accountId) p.set('account_id', accountId)
+  if (categoryId) p.set('category_id', categoryId)
   if (review) p.set('review', 'true')
   return `/api/transactions?${p}`
 }
@@ -22,10 +30,11 @@ export default function TransactionsPage({ reviewOnly = false }: { reviewOnly?: 
   const who = params.get('who') || ''
   const [q, setQ] = useState('')
   const [accountId, setAccountId] = useState('')
+  const [categoryId, setCategoryId] = useState('')
   const qc = useQueryClient()
   const { data: rows = [] } = useQuery({
-    queryKey: ['txns', month, who, q, accountId, reviewOnly],
-    queryFn: () => api.get<Transaction[]>(txnQuery(month, who, q, accountId, reviewOnly)),
+    queryKey: ['txns', month, who, q, accountId, categoryId, reviewOnly],
+    queryFn: () => api.get<Transaction[]>(txnQuery(month, who, q, accountId, categoryId, reviewOnly)),
   })
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
@@ -88,6 +97,12 @@ export default function TransactionsPage({ reviewOnly = false }: { reviewOnly?: 
           <option value="">All accounts</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </select>
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
         {selected.length > 0 && (

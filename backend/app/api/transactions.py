@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.db.engine import get_db
 from app.db.models import Transaction
 from app.schemas.dtos import BulkWhoIn, TransactionOut, TransactionPatch
-from app.services.categorizer import CONFIDENCE_REVIEW, upsert_user_rule
+from app.services.categorizer import CONFIDENCE_REVIEW, note_user_correction, upsert_user_rule
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -89,6 +89,8 @@ def patch_transaction(txn_id: int, body: TransactionPatch, db: Session = Depends
         txn.txn_kind = body.txn_kind
     if body.update_merchant_rule:
         upsert_user_rule(db, txn.merchant_norm, txn.category_id, txn.who)
+    if body.who is not None or body.category_id is not None:
+        note_user_correction(db)
     db.commit()
     db.refresh(txn)
     return _to_out(txn)
@@ -104,5 +106,6 @@ def bulk_who(body: BulkWhoIn, db: Session = Depends(get_db)):
         txn.who_source = "user"
         if body.update_merchant_rule:
             upsert_user_rule(db, txn.merchant_norm, txn.category_id, txn.who)
+        note_user_correction(db)
     db.commit()
     return {"updated": len(rows)}

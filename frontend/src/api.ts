@@ -1,6 +1,13 @@
 const json = async <T,>(res: Response): Promise<T> => {
   if (!res.ok) {
     const text = await res.text()
+    try {
+      const parsed = JSON.parse(text) as { detail?: string }
+      if (typeof parsed.detail === 'string') throw new Error(parsed.detail)
+    } catch (err) {
+      if (err instanceof SyntaxError) throw new Error(text || res.statusText)
+      throw err
+    }
     throw new Error(text || res.statusText)
   }
   return res.json() as Promise<T>
@@ -26,6 +33,11 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then((r) => json<T>(r)),
+  upload: <T,>(path: string, files: File[]) => {
+    const body = new FormData()
+    for (const file of files) body.append('files', file)
+    return fetch(path, { method: 'POST', body }).then((r) => json<T>(r))
+  },
 }
 
 export type Transaction = {
