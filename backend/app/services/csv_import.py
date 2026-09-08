@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -362,14 +364,21 @@ def collect_csv_files(directory: Path) -> list[Path]:
     return files
 
 
-def import_directory(db: Session, directory: str | Path) -> ImportResult:
+def sanitize_upload_name(name: str) -> str:
+    base = Path(name or "").name.strip()
+    if not base.lower().endswith(".csv"):
+        raise ValueError("only .csv files are accepted")
+    cleaned = re.sub(r"[^\w.\- ]+", "_", base).strip()
+    if not cleaned.lower().endswith(".csv"):
+        raise ValueError("only .csv files are accepted")
+    return cleaned[:180]
+
+
+def import_paths(db: Session, paths: Iterable[Path]) -> ImportResult:
     from app.services.categorizer import rebuild_merchant_rules, train_models
 
-    root = Path(directory)
-    if not root.is_dir():
-        raise FileNotFoundError(str(root))
     result = ImportResult()
-    for path in collect_csv_files(root):
+    for path in paths:
         result.files += 1
         try:
             parser, rows = parse_file(path)
@@ -379,8 +388,37 @@ def import_directory(db: Session, directory: str | Path) -> ImportResult:
             if batch.errors:
                 result.errors.extend(batch.errors)
         except Exception as exc:  # noqa: BLE001
-            result.errors.append(f"{path}: {exc}")
+            result.errors.append(f"{path.name}: {exc}")
     rebuild_merchant_rules(db)
     train_models(db)
     db.commit()
     return result
+
+
+def import_directory(db: Session, directory: str | Path) -> ImportResult:
+    root = Path(directory)
+    if not root.is_dir():
+        raise FileNotFoundError(str(root))
+    return import_paths(db, collect_csv_files(root))
+
+
+def import_uploads(db: Session, uploads: list[tuple[str, bytes]]) -> ImportResult:
+    if not uploads:
+        raise ValueError("no files uploaded")
+    tmp = Path(tempfile.mkdtemp(prefix="ft-csv-"))
+    try:
+        paths: list[Path] = []
+        errors: list[str] = []
+        for name, data in uploads:
+            try:
+                safe = sanitize_upload_name(name)
+                dest = tmp / safe
+                dest.write_bytes(data)
+                paths.append(dest)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{name}: {exc}")
+        result = import_paths(db, paths) if paths else ImportResult()
+        result.errors = errors + result.errors
+        return result
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

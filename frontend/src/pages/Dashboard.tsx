@@ -3,22 +3,25 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, money, type MonthReport, type Settings } from '../api'
 import MonthPicker from '../components/MonthPicker'
+import PendingToggle from '../components/PendingToggle'
 import SpendCharts from '../components/SpendCharts'
 import { downloadMonthPdf, type MonthSeries } from '../reportExport'
-import { useMonth } from '../useMonth'
+import { pendingQuery, useIncludePending, useMonth } from '../useMonth'
 
 export default function Dashboard() {
   const month = useMonth()
-  const [, setParams] = useSearchParams()
+  const [params, setParams] = useSearchParams()
+  const [includePending, setIncludePending] = useIncludePending()
+  const pending = pendingQuery(includePending)
   const [pdfError, setPdfError] = useState('')
   const [pdfBusy, setPdfBusy] = useState(false)
   const { data: report } = useQuery({
-    queryKey: ['report', month],
-    queryFn: () => api.get<MonthReport>(`/api/reports/month/${month}`),
+    queryKey: ['report', month, includePending],
+    queryFn: () => api.get<MonthReport>(`/api/reports/month/${month}${pending ? `?${pending}` : ''}`),
   })
   const { data: series } = useQuery({
-    queryKey: ['series', month],
-    queryFn: () => api.get<MonthSeries>(`/api/reports/month/${month}/series`),
+    queryKey: ['series', month, includePending],
+    queryFn: () => api.get<MonthSeries>(`/api/reports/month/${month}/series${pending ? `?${pending}` : ''}`),
   })
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -41,7 +44,7 @@ export default function Dashboard() {
               setPdfError('')
               setPdfBusy(true)
               try {
-                await downloadMonthPdf(month)
+                await downloadMonthPdf(month, includePending)
               } catch (err) {
                 setPdfError(err instanceof Error ? err.message : 'PDF export failed')
               } finally {
@@ -51,7 +54,15 @@ export default function Dashboard() {
           >
             {pdfBusy ? 'Exporting…' : 'Export PDF'}
           </button>
-          <MonthPicker value={month} onChange={(m) => setParams({ month: m })} />
+          <PendingToggle checked={includePending} onChange={setIncludePending} />
+          <MonthPicker
+            value={month}
+            onChange={(m) => {
+              const next = new URLSearchParams(params)
+              next.set('month', m)
+              setParams(next)
+            }}
+          />
         </div>
       </header>
       {pdfError && <p className="text-sm text-[var(--red)] mb-4">{pdfError}</p>}

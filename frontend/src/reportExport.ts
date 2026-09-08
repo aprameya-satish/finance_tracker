@@ -16,8 +16,9 @@ export const PALETTE = [
   '#94A3B8',
 ]
 
-export async function downloadMonthPdf(month: string) {
-  const res = await fetch(`/api/reports/month/${month}/pdf`)
+export async function downloadMonthPdf(month: string, includePending = false) {
+  const suffix = includePending ? '?include_pending=true' : ''
+  const res = await fetch(`/api/reports/month/${month}/pdf${suffix}`)
   if (!res.ok) {
     throw new Error(await res.text())
   }

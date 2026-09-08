@@ -10,11 +10,13 @@ from rapidfuzz import fuzz, process
 from sqlalchemy.orm import Session
 
 from app.core.config import DATA_DIR
-from app.db.models import Category, MerchantRule, Transaction
+from app.db.models import AppSetting, Category, MerchantRule, Transaction
 from app.services.merchant import normalize_merchant
 
 MODEL_DIR = DATA_DIR / "categorizer"
 CONFIDENCE_REVIEW = 0.75
+RETRAIN_EVERY = 10
+CORRECTION_KEY = "user_corrections_since_train"
 
 PLAID_PFC_MAP = {
     "FOOD_AND_DRINK": "Restaurants",
@@ -225,6 +227,21 @@ def categorize_unlabeled(db: Session, only_missing: bool = True) -> int:
         n += 1
     db.flush()
     return n
+
+
+def note_user_correction(db: Session) -> dict | None:
+    row = db.query(AppSetting).filter_by(key=CORRECTION_KEY).one_or_none()
+    if row is None:
+        row = AppSetting(key=CORRECTION_KEY, value="0")
+        db.add(row)
+        db.flush()
+    count = int(row.value or "0") + 1
+    row.value = str(count)
+    if count < RETRAIN_EVERY:
+        return None
+    info = train_models(db)
+    row.value = "0"
+    return info
 
 
 def upsert_user_rule(db: Session, merchant_norm: str, category_id: int | None, who: str) -> None:

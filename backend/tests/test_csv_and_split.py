@@ -49,6 +49,36 @@ def test_utilities_parser():
     assert rows[0].who == "shared"
 
 
+def test_sanitize_upload_name():
+    from app.services.csv_import import sanitize_upload_name
+
+    assert sanitize_upload_name("C:/tmp/Chase1561_Activity.csv") == "Chase1561_Activity.csv"
+    try:
+        sanitize_upload_name("notes.txt")
+        raise AssertionError("expected rejection")
+    except ValueError:
+        pass
+
+
+def test_import_uploads(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.engine import Base
+    from app.db import models  # noqa: F401
+    from app.db.models import Transaction
+    from app.services.csv_import import import_uploads
+
+    engine = create_engine(f"sqlite:///{tmp_path}/u.db")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    payload = (FIXTURES / "Chase1561_Activity.csv").read_bytes()
+    result = import_uploads(db, [("Chase1561_Activity.csv", payload)])
+    assert result.files == 1
+    assert result.rows_ok == 3
+    assert db.query(Transaction).count() == 3
+
+
 def test_import_and_who_edit(tmp_path, monkeypatch):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -74,3 +104,101 @@ def test_import_and_who_edit(tmp_path, monkeypatch):
     again = db.query(Transaction).filter_by(id=txn.id).one()
     assert again.who == "S"
     assert again.who_source == "user"
+
+
+def test_apply_prediction_preserves_user_labels():
+    from types import SimpleNamespace
+
+    from app.services.categorizer import apply_prediction
+
+    txn = SimpleNamespace(
+        who="A",
+        who_source="user",
+        category_id=1,
+        category_source="user",
+        category_confidence=1.0,
+    )
+    apply_prediction(
+        txn,
+        {"category_id": 99, "who": "S", "confidence": 0.9, "source": "rule"},
+    )
+    assert txn.who == "A"
+    assert txn.category_id == 1
+    assert txn.category_source == "user"
+
+
+def test_note_user_correction_retrains_after_n(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.engine import Base
+    from app.db import models  # noqa: F401
+    from app.db.models import AppSetting
+    from app.services import categorizer
+
+    monkeypatch.setattr(categorizer, "RETRAIN_EVERY", 2)
+    called = {"n": 0}
+
+    def fake_train(db):
+        called["n"] += 1
+        return {"trained": True}
+
+    monkeypatch.setattr(categorizer, "train_models", fake_train)
+    engine = create_engine(f"sqlite:///{tmp_path}/retrain.db")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    assert categorizer.note_user_correction(db) is None
+    assert db.query(AppSetting).filter_by(key=categorizer.CORRECTION_KEY).one().value == "1"
+    info = categorizer.note_user_correction(db)
+    assert info == {"trained": True}
+    assert called["n"] == 1
+    assert db.query(AppSetting).filter_by(key=categorizer.CORRECTION_KEY).one().value == "0"
+
+
+def test_budget_status_and_copy(tmp_path):
+    from datetime import date
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.engine import Base
+    from app.db import models  # noqa: F401
+    from app.db.models import Account, Budget, Category, Institution, Transaction
+    from app.services.budget import budget_status, copy_budgets, month_budget_report
+
+    engine = create_engine(f"sqlite:///{tmp_path}/b.db")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    assert budget_status(79, 100) == "ok"
+    assert budget_status(80, 100) == "watch"
+    assert budget_status(101, 100) == "over"
+
+    inst = Institution(name="Chase")
+    db.add(inst)
+    db.flush()
+    acct = Account(institution_id=inst.id, name="Chase 1561", last4="1561", kind="credit")
+    cat = Category(name="Groceries", include_in_budget=True)
+    db.add_all([acct, cat])
+    db.flush()
+    db.add(Budget(year_month="2026-03", category_id=cat.id, limit_cents=5000))
+    db.add(
+        Transaction(
+            account_id=acct.id,
+            source="csv",
+            external_id="t1",
+            date=date(2026, 4, 2),
+            description_raw="STORE",
+            merchant_norm="STORE",
+            amount_cents=6000,
+            txn_kind="spend",
+            category_id=cat.id,
+            who="shared",
+        )
+    )
+    copied = copy_budgets(db, "2026-03", "2026-04")
+    db.commit()
+    assert copied == 1
+    rows = month_budget_report(db, "2026-04")
+    groceries = next(r for r in rows if r["category"] == "Groceries")
+    assert groceries["status"] == "over"
+    assert groceries["spent_cents"] == 6000
