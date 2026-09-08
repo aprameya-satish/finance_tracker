@@ -9,14 +9,28 @@ import json
 def csv_subtotals(data: pd.DataFrame):
     
     st = {}
-    st['A_subtotal']    = np.abs(data[data['Who'] == 'A']['Amount'].sum(axis='index'))
-    st['S_subtotal']    = np.abs(data[data['Who'] == 'S']['Amount'].sum(axis='index'))
-    st['both_subtotal'] = np.abs(data.loc[(data['Who'] != 'A') & (data['Who'] != 'S')]['Amount'].sum(axis='index'))
+    st['A_subtotal']    = data[data['Who'] == 'A']['Amount'].sum(axis='index')
+    st['S_subtotal']    = data[data['Who'] == 'S']['Amount'].sum(axis='index')
+    st['both_subtotal'] = data.loc[(data['Who'] != 'A') & (data['Who'] != 'S')]['Amount'].sum(axis='index')
+
+    # run parity check with total from data and subtotal sum
+    subtotal_sum = st['A_subtotal'] + st['S_subtotal'] + st['both_subtotal']
+    total_sum = np.sum(data['Amount'])
+    parity = np.abs(subtotal_sum - total_sum)
+    if parity > 1:
+        print(f'WARNING - There is a {parity} USD difference in subtotal and total data. Double check calculations!')  
 
     return st
 
 def get_credit_card_csv(csv_filepath):
     data = pd.read_csv(csv_filepath)
+
+    # Place check to ensure that CSV credit value formats are consistent across all files.
+    if "Amex" in csv_filepath:
+        pass
+    elif "Chase" in csv_filepath:
+        data['Amount'] = -1*data['Amount']
+    
     return data
 
 def get_parsed_args():
@@ -55,8 +69,11 @@ def category_totals(data):
 
     for category in categories:
         # Using abs is risky if returns are present. Will need to place a check on this.
-        # This should work since the abs is called on the sum-total of all transactions within the sheet.        
-        cat_totals[category] = np.abs(data[data['Category'] == category]['Amount'].sum(axis='index'))
+        # This should work since the abs is called on the sum-total of all transactions within the sheet - unless there is a single value in the category.        
+        if data[data['Category'] == category].shape[0] > 1:
+            cat_totals[category] = np.abs(data[data['Category'] == category]['Amount'].sum(axis='index'))
+        else:
+            cat_totals[category] = data[data['Category'] == category]['Amount'].values[0]
 
     return cat_totals
 
@@ -124,8 +141,7 @@ if __name__ == '__main__':
     else:
         # Test case
         print('Running Test Case:')
-        # csv_directory = 'E:\\Personal\\Finance\\Credit Card Reports\\2023-05'
-        csv_directory = "E:\\Finance\\Expense Tracking\\2024\\2025-06"
+        csv_directory = "E:\\finance\\expense_tracking\\2026\\2026-04"
         csv_files = get_csv_files(csv_directory)
 
     cat_totals = {}
@@ -145,6 +161,18 @@ if __name__ == '__main__':
                     cat_totals[category] += np.round(cat_tmp[category], 2)
                 else:
                     cat_totals[category] = np.round(cat_tmp[category], 2)
+
+        # Run parity check on category totals to make sure that the sum of category totals is equal to the sum of subtotals for the month. This is a sanity check to make sure that the category totals are being calculated correctly.
+        total_across_categories = 0
+        for category in cat_tmp:
+            total_across_categories += cat_tmp[category]
+        
+        cc_total = np.abs(np.sum(data.Amount))
+        print(f'cc_total: {cc_total}, total_across_categories: {total_across_categories}')
+        parity = np.abs(cc_total - total_across_categories)
+
+        if parity > 1:
+            print(f'WARNING - There is a {parity} USD difference in {csv_file.split("\\")[-1]} data.')
 
         print('Category Totals:')
         print(json.dumps(cat_totals, sort_keys=False, indent=4, separators=(',', ':')))

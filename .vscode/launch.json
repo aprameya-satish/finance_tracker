@@ -11,7 +11,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["--csv_directory", "E:\\Finance\\Expense Tracking\\2025\\2025-06"]
+            "args": ["--debug_mode"]
         }
     ]
 }
