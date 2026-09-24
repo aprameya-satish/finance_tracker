@@ -29,8 +29,12 @@ function PlaidConnect({ enabled, onDone, onError }: { enabled: boolean; onDone: 
   const creating = useRef(false)
 
   const onSuccess = useCallback(
-    async (publicToken: string) => {
+    async (publicToken: string | null) => {
       sessionStorage.removeItem('plaid_link_token')
+      if (!publicToken) {
+        onError('Plaid did not return a public token')
+        return
+      }
       try {
         await api.post('/api/plaid/exchange', { public_token: publicToken })
         await api.post('/api/plaid/sync')
