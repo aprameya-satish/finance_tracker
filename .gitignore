@@ -8,6 +8,9 @@ venv/
 backend/.venv/
 frontend/node_modules/
 frontend/dist/
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
 *.egg-info/
 .DS_Store
 thumbs.db

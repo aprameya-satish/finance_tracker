@@ -18,6 +18,20 @@ npm install
 npm run dev
 ```
 
+Open http://localhost:5173. For the iPhone app, bind the API on the LAN and start Expo:
+
+```bash
+# backend reachable from a phone on the same Wi-Fi
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# iPhone client (third terminal)
+cd mobile
+npm install
+npx expo start
+```
+
+Scan the QR code with Expo Go. Set the API URL in **More → Settings** if it does not pick up your computer automatically. Details are in [`mobile/README.md`](mobile/README.md).
+
 Open http://localhost:5173. Import historical CSVs from Accounts, or:
 
 ```bash
