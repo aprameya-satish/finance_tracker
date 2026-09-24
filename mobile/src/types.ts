@@ -1,36 +1,3 @@
-import { localClient, loadLocalFinance } from './local'
-import type { ImportResult } from '../../shared/finance/types.ts'
-
-const ready = () => loadLocalFinance()
-
-export const api = {
-  get: async <T,>(path: string) => {
-    await ready()
-    return (await localClient.get(path)) as T
-  },
-  post: async <T,>(path: string, body?: unknown) => {
-    await ready()
-    return (await localClient.post(path, body)) as T
-  },
-  put: async <T,>(path: string, body?: unknown) => {
-    await ready()
-    return (await localClient.put(path, body)) as T
-  },
-  patch: async <T,>(path: string, body?: unknown) => {
-    await ready()
-    return (await localClient.patch(path, body)) as T
-  },
-  upload: async <T,>(path: string, files: File[]) => {
-    await ready()
-    const payload = await Promise.all(
-      files.map(async (file) => ({ name: file.name, text: await file.text() })),
-    )
-    return (await localClient.upload(path, payload)) as T
-  },
-}
-
-export type { ImportResult }
-
 export type Transaction = {
   id: number
   date: string
@@ -100,5 +67,30 @@ export type Settings = {
   plaid_products: string[]
 }
 
-export const money = (cents: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
+export type PlaidItem = {
+  id: number
+  item_id: string
+  institution_name: string | null
+  status: string
+  products: string[]
+  last_synced_at: string | null
+}
+
+export type ImportResult = {
+  files: number
+  rows_ok: number
+  rows_skipped: number
+  errors: string[]
+}
+
+export type Health = {
+  ok: boolean
+  plaid_configured: boolean
+  db: string
+}
+
+export type InvestmentSummary = {
+  as_of: string | null
+  value_cents: number
+  holdings: unknown[]
+}

@@ -1,27 +1,41 @@
 # Finance Tracker
 
-Local household finance app: ingest Chase/Amex CSVs, sync cards with Plaid, auto-categorize from your history, budget by category, and split spend between A / S / shared.
+Household finance app: Chase/Amex CSV ingest, auto-categorize from your labels, budgets, and A / S / shared split.
 
-## Run locally
+## Use it on an iPhone (no computer)
 
-Copy `.env.example` to `.env` and add Plaid keys when you are ready (sandbox works without live cards).
+The app now runs **entirely on the phone**. Open this site in Safari, then **Share → Add to Home Screen**.
+
+After GitHub Pages is enabled on this repo, the address is:
+
+**https://aprameya-satish.github.io/finance_tracker/**
+
+From the GitHub iOS app: repo → Settings (or the website) → Pages → Deploy from GitHub Actions (or `/docs`).
+
+Then:
+
+1. Upload statement CSVs from the Files app (Accounts).
+2. Edit Who / category on Activity or Split.
+3. Export a backup from Settings if you change phones.
+
+Data stays in that home-screen app. Clearing Safari data can delete it — keep a backup.
+
+## Optional: computer + API
+
+Copy `.env.example` to `.env` for Plaid keys if you later want live bank sync on a computer.
 
 ```bash
-# backend
 cd backend
 python -m pip install -e ".[dev]"
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-# frontend (second terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Import historical CSVs from Accounts, or:
-
 ```bash
 python monthly_split_calculator.py --csv_directory "E:\finance\expense_tracking"
 ```
 
-Plaid access tokens are encrypted at rest and never sent to the browser. SQLite lives in `data/` (gitignored).
+Plaid access tokens are encrypted at rest and never sent to the browser. SQLite on a computer lives in `data/` (gitignored). The phone app uses on-device storage instead.
