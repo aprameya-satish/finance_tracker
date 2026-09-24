@@ -6,11 +6,20 @@ Household finance app: Chase/Amex CSV ingest, auto-categorize from your labels, 
 
 The app now runs **entirely on the phone**. Open this site in Safari, then **Share → Add to Home Screen**.
 
-After GitHub Pages is enabled on this repo, the address is:
+The address is **not an IP**. Use this URL in Safari:
 
 **https://aprameya-satish.github.io/finance_tracker/**
 
-From the GitHub iOS app: repo → Settings (or the website) → Pages → Deploy from GitHub Actions (or `/docs`).
+If that page 404s, Pages is enabled but nothing has been published yet. The first GitHub Action deploy failed because Pages was still off. Fix it in the repo **Settings → Pages**:
+
+1. Under **Build and deployment → Source**, choose **Deploy from a branch**.
+2. Branch: `main`
+3. Folder: `/docs`
+4. Save
+
+Wait a minute, then open the URL above again. Do **not** look for a numeric IP.
+
+Alternatively, leave Source as **GitHub Actions** and run the **Deploy phone app** workflow once (Actions tab → Deploy phone app → Run workflow).
 
 Then:
 
