@@ -100,6 +100,10 @@ class LinkTokenOut(BaseModel):
     link_token: str
 
 
+class LinkTokenIn(BaseModel):
+    redirect_uri: Optional[str] = None
+
+
 class PublicTokenIn(BaseModel):
     public_token: str
 

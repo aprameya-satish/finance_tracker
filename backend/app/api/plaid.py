@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.security import require_api_key
 from app.db.engine import get_db
 from app.db.models import PlaidItem
-from app.schemas.dtos import LinkTokenOut, PublicTokenIn
+from app.schemas.dtos import LinkTokenIn, LinkTokenOut, PublicTokenIn
 from app.services.plaid_service import (
     PlaidNotConfigured,
+    build_snapshot,
     create_link_token,
     exchange_public_token,
     plaid_configured,
@@ -13,15 +15,15 @@ from app.services.plaid_service import (
     sync_item,
 )
 
-router = APIRouter(prefix="/plaid", tags=["plaid"])
+router = APIRouter(prefix="/plaid", tags=["plaid"], dependencies=[Depends(require_api_key)])
 
 
 @router.post("/link-token", response_model=LinkTokenOut)
-def link_token():
+def link_token(body: LinkTokenIn | None = None):
     if not plaid_configured():
         raise HTTPException(503, "Plaid credentials are not configured")
     try:
-        token = create_link_token()
+        token = create_link_token(body.redirect_uri if body else None)
     except PlaidNotConfigured as exc:
         raise HTTPException(503, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
@@ -67,3 +69,8 @@ def list_items(db: Session = Depends(get_db)):
         }
         for r in rows
     ]
+
+
+@router.get("/snapshot")
+def snapshot(db: Session = Depends(get_db)):
+    return build_snapshot(db)

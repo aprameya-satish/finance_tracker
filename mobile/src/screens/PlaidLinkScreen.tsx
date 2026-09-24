@@ -15,7 +15,9 @@ export default function PlaidLinkScreen() {
 
   useEffect(() => {
     api
-      .post<{ link_token: string }>('/api/plaid/link-token')
+      .post<{ link_token: string }>('/api/plaid/link-token', {
+        redirect_uri: 'https://cdn.plaid.com/link/v2/stable/oauth.html',
+      })
       .then((res) => setToken(res.link_token))
       .catch((err: Error) => setError(err.message))
   }, [api])

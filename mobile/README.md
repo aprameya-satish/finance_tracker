@@ -1,6 +1,8 @@
 # Finance iPhone app
 
-On-device household tracker. No computer or FastAPI process is required.
+On-device household tracker. CSV, split, and budgets run on the phone.
+
+Live Plaid linking needs a hosted FastAPI URL in Settings (Plaid secrets cannot ship in the app).
 
 The easiest install path with no Mac/PC is the **Safari home-screen app**:
 

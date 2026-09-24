@@ -5,7 +5,7 @@ import { colors } from '../theme'
 
 const LINKS = [
   ['Review', 'Low-confidence queue'],
-  ['Accounts', 'CSV upload'],
+  ['Accounts', 'Plaid + CSV upload'],
   ['Investments', 'Holdings harness'],
   ['Settings', 'People, API URL, categories'],
 ] as const

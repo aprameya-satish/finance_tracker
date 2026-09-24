@@ -34,6 +34,8 @@ export type Account = {
   kind: string
   institution: string
   is_active: boolean
+  plaid_account_id: string | null
+  plaid_item_id: number | null
 }
 
 export type Institution = {
@@ -86,6 +88,51 @@ export type Settings = {
   plaid_configured: boolean
   plaid_env: string
   plaid_products: string[]
+  plaid_api_url: string
+  plaid_api_key: string
+}
+
+export type PlaidItem = {
+  id: number
+  item_id: string
+  institution_name: string | null
+  status: string
+  products: string[]
+  last_synced_at: string | null
+}
+
+export type PlaidSnapshotAccount = {
+  plaid_account_id: string
+  plaid_item_id: number
+  name: string
+  last4: string | null
+  kind: string
+  institution: string
+  is_active: boolean
+}
+
+export type PlaidSnapshotTransaction = {
+  external_id: string
+  plaid_account_id: string
+  date: string
+  description: string
+  merchant_norm: string
+  amount_cents: number
+  txn_kind: string
+  pending: boolean
+  who: string
+  who_source: string
+  category: string | null
+  category_source: string | null
+  category_confidence: number | null
+  notes: string | null
+  plaid_pfc_primary: string | null
+}
+
+export type PlaidSnapshot = {
+  items: PlaidItem[]
+  accounts: PlaidSnapshotAccount[]
+  transactions: PlaidSnapshotTransaction[]
 }
 
 export type ImportResult = {
@@ -128,6 +175,8 @@ export type LocalState = {
     person_a: string
     person_s: string
     csv_import_directory: string
+    plaid_api_url: string
+    plaid_api_key: string
   }
 }
 
@@ -145,6 +194,22 @@ export function emptyState(): LocalState {
       person_a: 'Aprameya',
       person_s: 'Savanthi',
       csv_import_directory: '',
+      plaid_api_url: '',
+      plaid_api_key: '',
     },
   }
+}
+
+export function migrateState(state: LocalState): LocalState {
+  if (!state.settings) state.settings = emptyState().settings
+  if (state.settings.plaid_api_url == null) state.settings.plaid_api_url = ''
+  if (state.settings.plaid_api_key == null) state.settings.plaid_api_key = ''
+  if (state.settings.person_a == null) state.settings.person_a = 'Aprameya'
+  if (state.settings.person_s == null) state.settings.person_s = 'Savanthi'
+  if (state.settings.csv_import_directory == null) state.settings.csv_import_directory = ''
+  for (const account of state.accounts) {
+    if (account.plaid_account_id === undefined) account.plaid_account_id = null
+    if (account.plaid_item_id === undefined) account.plaid_item_id = null
+  }
+  return state
 }

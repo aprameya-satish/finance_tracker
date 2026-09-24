@@ -21,6 +21,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"ok": True, "service": "finance-tracker"}
+
+
 app.include_router(health.router, prefix="/api")
 app.include_router(accounts.router, prefix="/api")
 app.include_router(transactions.router, prefix="/api")

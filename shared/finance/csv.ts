@@ -210,6 +210,8 @@ function getOrCreateAccount(state: LocalState, row: ParsedRow) {
       kind: row.account_kind,
       institution: inst.name,
       is_active: true,
+      plaid_account_id: null,
+      plaid_item_id: null,
     }
     state.accounts.push(acct)
   }

@@ -65,6 +65,8 @@ export type Account = {
   kind: string
   institution: string
   is_active: boolean
+  plaid_account_id?: string | null
+  plaid_item_id?: number | null
 }
 
 export type BudgetRow = {
@@ -98,6 +100,17 @@ export type Settings = {
   plaid_configured: boolean
   plaid_env: string
   plaid_products: string[]
+  plaid_api_url: string
+  plaid_api_key: string
+}
+
+export type PlaidItem = {
+  id: number
+  item_id: string
+  institution_name: string | null
+  status: string
+  products: string[]
+  last_synced_at: string | null
 }
 
 export const money = (cents: number) =>

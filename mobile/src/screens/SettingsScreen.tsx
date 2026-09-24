@@ -23,17 +23,44 @@ export default function SettingsScreen() {
   })
   const [personA, setPersonA] = useState('Aprameya')
   const [personS, setPersonS] = useState('Savanthi')
+  const [plaidUrl, setPlaidUrl] = useState('')
+  const [plaidKey, setPlaidKey] = useState('')
   const [health, setHealth] = useState('')
 
   useEffect(() => {
     if (!data) return
     setPersonA(data.person_a)
     setPersonS(data.person_s)
+    setPlaidUrl(data.plaid_api_url || '')
+    setPlaidKey(data.plaid_api_key || '')
   }, [data])
 
   const save = useMutation({
-    mutationFn: () => api.put('/api/settings', { person_a: personA, person_s: personS }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    mutationFn: () =>
+      api.put('/api/settings', {
+        person_a: personA,
+        person_s: personS,
+        plaid_api_url: plaidUrl,
+        plaid_api_key: plaidKey,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries()
+      setHealth('Saved.')
+    },
+    onError: (err: Error) => setHealth(err.message),
+  })
+  const ping = useMutation({
+    mutationFn: async () => {
+      await api.put('/api/settings', { plaid_api_url: plaidUrl, plaid_api_key: plaidKey })
+      return api.get<Settings>('/api/settings')
+    },
+    onSuccess: (next) => {
+      qc.invalidateQueries()
+      if (next.plaid_env === 'unreachable') setHealth('Saved, but the hosted API did not respond.')
+      else if (!next.plaid_configured) setHealth(`Reached ${next.plaid_env}, but Plaid keys are not set on the server.`)
+      else setHealth(`Plaid ready (${next.plaid_env}). Link a bank from Accounts.`)
+    },
+    onError: (err: Error) => setHealth(err.message),
   })
   const toggleBudget = useMutation({
     mutationFn: (c: Category) => api.patch(`/api/categories/${c.id}`, { include_in_budget: !c.include_in_budget }),
@@ -50,8 +77,28 @@ export default function SettingsScreen() {
       <Field label="Person A" value={personA} onChangeText={setPersonA} />
       <View style={{ height: 10 }} />
       <Field label="Person S" value={personS} onChangeText={setPersonS} />
-      <View style={{ height: 12 }} />
+      <View style={{ height: 10 }} />
+      <Field
+        label="Plaid API URL"
+        value={plaidUrl}
+        onChangeText={setPlaidUrl}
+        placeholder="https://your-api.onrender.com"
+        keyboardType="url"
+      />
+      <View style={{ height: 10 }} />
+      <Field
+        label="API key (optional)"
+        value={plaidKey}
+        onChangeText={setPlaidKey}
+        placeholder="X-Finance-Key if the host requires one"
+      />
+      <Text style={{ color: colors.muted, marginTop: 8, marginBottom: 12, lineHeight: 20 }}>
+        Plaid secrets stay on the hosted API.
+        {data?.plaid_configured ? ` Ready (${data.plaid_env}).` : data?.plaid_api_url ? ` ${data.plaid_env}.` : ''}
+      </Text>
       <PrimaryButton label={save.isPending ? 'Saving…' : 'Save household'} onPress={() => save.mutate()} />
+      <View style={{ height: 10 }} />
+      <PrimaryButton label={ping.isPending ? 'Checking…' : 'Test Plaid API'} onPress={() => ping.mutate()} />
       <View style={{ height: 16 }} />
       <PrimaryButton
         label="Export backup"

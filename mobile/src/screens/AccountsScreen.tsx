@@ -1,3 +1,4 @@
+import { useNavigation } from '@react-navigation/native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as DocumentPicker from 'expo-document-picker'
 import { useState } from 'react'
@@ -7,14 +8,24 @@ import type { UploadFile } from '../legacyTypes'
 import { Card, Eyebrow, GhostButton, PrimaryButton, Screen, Title } from '../components/ui'
 import { formatImportResult } from '../money'
 import { colors } from '../theme'
-import type { Account, ImportResult } from '../../../shared/finance/types.ts'
+import type { Account, ImportResult, PlaidItem, Settings } from '../../../shared/finance/types.ts'
 
 export default function AccountsScreen() {
   const { api } = useApp()
+  const navigation = useNavigation<{ navigate: (name: 'PlaidLink') => void }>()
   const qc = useQueryClient()
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts', api.root],
     queryFn: () => api.get<Account[]>('/api/accounts'),
+  })
+  const { data: settings } = useQuery({
+    queryKey: ['settings', api.root],
+    queryFn: () => api.get<Settings>('/api/settings'),
+  })
+  const { data: items = [] } = useQuery({
+    queryKey: ['plaid-items', api.root],
+    queryFn: () => api.get<PlaidItem[]>('/api/plaid/items'),
+    enabled: Boolean(settings?.plaid_api_url),
   })
   const [files, setFiles] = useState<UploadFile[]>([])
   const [result, setResult] = useState('')
@@ -27,15 +38,58 @@ export default function AccountsScreen() {
     },
     onError: (e: Error) => setResult(e.message),
   })
+  const syncPlaid = useMutation({
+    mutationFn: () => api.post('/api/plaid/sync'),
+    onSuccess: () => {
+      setResult('Plaid sync finished. Transactions are on this phone.')
+      qc.invalidateQueries()
+    },
+    onError: (e: Error) => setResult(e.message),
+  })
+  const plaidReady = Boolean(settings?.plaid_api_url && settings.plaid_configured)
 
   return (
     <Screen>
       <Eyebrow>On this phone</Eyebrow>
       <Title>Accounts</Title>
       <Text style={{ color: colors.muted, marginBottom: 16, lineHeight: 20 }}>
-        Upload Chase, Amex, or utilities CSVs from Files. Processing stays on this iPhone.
+        Upload CSVs from Files, or link a bank through a hosted Plaid API URL in Settings. Who labels stay editable.
       </Text>
       <Text style={{ color: colors.muted, fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 10 }}>
+        Plaid
+      </Text>
+      {!settings?.plaid_api_url && (
+        <Text style={{ color: colors.muted, marginBottom: 12 }}>Set a hosted Plaid API URL in Settings to link Chase or Amex.</Text>
+      )}
+      {settings?.plaid_api_url && settings.plaid_env === 'unreachable' && (
+        <Text style={{ color: colors.muted, marginBottom: 12 }}>Hosted API is unreachable. Check the URL and API key.</Text>
+      )}
+      {settings?.plaid_api_url && settings.plaid_env !== 'unreachable' && !settings.plaid_configured && (
+        <Text style={{ color: colors.muted, marginBottom: 12 }}>
+          Host reached, but Plaid keys are missing on the server.
+        </Text>
+      )}
+      {plaidReady && (
+        <>
+          <PrimaryButton label="Link bank" onPress={() => navigation.navigate('PlaidLink')} />
+          <View style={{ height: 10 }} />
+          <PrimaryButton
+            label={syncPlaid.isPending ? 'Syncing…' : 'Sync accounts'}
+            disabled={syncPlaid.isPending}
+            onPress={() => syncPlaid.mutate()}
+          />
+        </>
+      )}
+      {items.map((item) => (
+        <Card key={item.id}>
+          <Text style={{ color: colors.text }}>{item.institution_name || item.item_id}</Text>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>
+            {item.status}
+            {item.last_synced_at ? ` · last sync ${String(item.last_synced_at).replace('T', ' ').slice(0, 16)}` : ''}
+          </Text>
+        </Card>
+      ))}
+      <Text style={{ color: colors.muted, fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 20, marginBottom: 10 }}>
         Connected
       </Text>
       {accounts.map((a) => (
@@ -44,10 +98,11 @@ export default function AccountsScreen() {
           <Text style={{ color: colors.muted, fontSize: 12 }}>
             {a.institution} · {a.kind}
             {a.last4 ? ` · ${a.last4}` : ''}
+            {a.plaid_account_id ? ' · Plaid' : ''}
           </Text>
         </Card>
       ))}
-      {accounts.length === 0 && <Text style={{ color: colors.muted, marginBottom: 12 }}>No accounts yet. Upload a statement CSV.</Text>}
+      {accounts.length === 0 && <Text style={{ color: colors.muted, marginBottom: 12 }}>No accounts yet. Link a bank or upload a statement CSV.</Text>}
       <PrimaryButton
         label="Choose files"
         onPress={async () => {

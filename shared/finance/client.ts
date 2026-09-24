@@ -1,7 +1,8 @@
 import { importUploads } from './csv.ts'
+import { ingestPlaidSnapshot, remotePlaidJson } from './plaid.ts'
 import { copyBudgets, latestMonth, monthBudgetReport, monthSeries, splitTotals } from './reports.ts'
 import { FinanceStore } from './store.ts'
-import type { Account, Category, ImportResult, Settings, Transaction } from './types.ts'
+import type { Account, Category, ImportResult, PlaidSnapshot, Settings, Transaction } from './types.ts'
 
 function query(path: string) {
   return new URL(path, 'https://local.finance')
@@ -18,24 +19,64 @@ function hydrateTxn(store: FinanceStore, txn: Transaction): Transaction {
   return { ...txn, category: cat?.name ?? null, account_name: acct?.name || txn.account_name }
 }
 
+function plaidRemote(store: FinanceStore) {
+  const url = store.state.settings.plaid_api_url
+  const apiKey = store.state.settings.plaid_api_key
+  return { url, apiKey }
+}
+
+async function probeRemotePlaid(store: FinanceStore): Promise<Pick<Settings, 'plaid_configured' | 'plaid_env' | 'plaid_products'>> {
+  const { url, apiKey } = plaidRemote(store)
+  if (!url) return { plaid_configured: false, plaid_env: 'local', plaid_products: [] }
+  try {
+    const remote = await remotePlaidJson<Partial<Settings> & { plaid_configured?: boolean }>(url, '/api/settings', {
+      apiKey,
+      timeoutMs: 8000,
+    })
+    return {
+      plaid_configured: Boolean(remote.plaid_configured),
+      plaid_env: remote.plaid_env || 'sandbox',
+      plaid_products: remote.plaid_products || ['transactions'],
+    }
+  } catch {
+    return { plaid_configured: false, plaid_env: 'unreachable', plaid_products: [] }
+  }
+}
+
+async function pullPlaidSnapshot(store: FinanceStore) {
+  const { url, apiKey } = plaidRemote(store)
+  const snap = await remotePlaidJson<PlaidSnapshot>(url, '/api/plaid/snapshot', { apiKey })
+  const result = ingestPlaidSnapshot(store.state, snap)
+  await store.save()
+  return result
+}
+
 export function createLocalClient(store: FinanceStore) {
   const save = () => store.save()
 
   const get = async (path: string): Promise<unknown> => {
     const url = query(path)
     const p = url.pathname
-    if (p === '/api/health') return { ok: true, plaid_configured: false, db: 'on-device' }
+    if (p === '/api/health') {
+      const remote = await probeRemotePlaid(store)
+      return { ok: true, plaid_configured: remote.plaid_configured, db: 'on-device' }
+    }
     if (p === '/api/settings') {
+      const remote = await probeRemotePlaid(store)
       return {
         ...store.state.settings,
-        plaid_configured: false,
-        plaid_env: 'local',
-        plaid_products: [],
+        plaid_api_url: store.state.settings.plaid_api_url,
+        plaid_api_key: store.state.settings.plaid_api_key,
+        ...remote,
       } satisfies Settings
     }
     if (p === '/api/categories') return store.state.categories
     if (p === '/api/accounts') return store.state.accounts.map((a) => ({ ...a, is_active: true }))
-    if (p === '/api/plaid/items') return []
+    if (p === '/api/plaid/items' || p === '/api/plaid/snapshot') {
+      const remote = plaidRemote(store)
+      if (!remote.url) return p === '/api/plaid/items' ? [] : { items: [], accounts: [], transactions: [] }
+      return remotePlaidJson(remote.url, p + url.search, { apiKey: remote.apiKey })
+    }
     if (p === '/api/investments/summary') return { as_of: null, value_cents: 0, holdings: [] }
     if (p === '/api/investments/holdings') return []
     if (p === '/api/reports/latest-month') return { year_month: latestMonth(store.state) }
@@ -91,7 +132,20 @@ export function createLocalClient(store: FinanceStore) {
       throw new Error('Folder import needs a computer. Use Upload CSVs on this phone instead.')
     }
     if (p.startsWith('/api/plaid/')) {
-      throw new Error('Plaid linking needs a hosted backend. Upload CSVs on this phone instead.')
+      const remote = plaidRemote(store)
+      if (!remote.url) {
+        throw new Error('Plaid linking needs a hosted backend URL in Settings.')
+      }
+      const result = await remotePlaidJson(remote.url, p + url.search, {
+        method: 'POST',
+        body: body ?? {},
+        apiKey: remote.apiKey,
+      })
+      if (p === '/api/plaid/exchange' || p === '/api/plaid/sync') {
+        const snap = await pullPlaidSnapshot(store)
+        return { ...((result && typeof result === 'object') ? result : {}), snapshot: snap }
+      }
+      return result
     }
     throw new Error(`unknown POST ${p}`)
   }
@@ -103,6 +157,8 @@ export function createLocalClient(store: FinanceStore) {
       if (payload.person_a != null) store.state.settings.person_a = payload.person_a
       if (payload.person_s != null) store.state.settings.person_s = payload.person_s
       if (payload.csv_import_directory != null) store.state.settings.csv_import_directory = payload.csv_import_directory
+      if (payload.plaid_api_url != null) store.state.settings.plaid_api_url = payload.plaid_api_url.trim()
+      if (payload.plaid_api_key != null) store.state.settings.plaid_api_key = payload.plaid_api_key.trim()
       await save()
       return get('/api/settings')
     }

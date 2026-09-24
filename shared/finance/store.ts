@@ -1,4 +1,4 @@
-import { emptyState, type LocalState } from './types.ts'
+import { emptyState, migrateState, type LocalState } from './types.ts'
 
 const STORAGE_KEY = 'finance-tracker-v1'
 
@@ -91,7 +91,7 @@ export class FinanceStore {
     if (!raw) return
     try {
       const parsed = JSON.parse(raw) as LocalState
-      if (parsed?.version === 1) this.state = parsed
+      if (parsed?.version === 1) this.state = migrateState(parsed)
     } catch {
       /* keep empty */
     }
@@ -108,7 +108,7 @@ export class FinanceStore {
   async importJson(raw: string) {
     const parsed = JSON.parse(raw) as LocalState
     if (parsed?.version !== 1) throw new Error('unsupported backup')
-    this.state = parsed
+    this.state = migrateState(parsed)
     await this.save()
   }
 }
