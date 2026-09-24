@@ -1,84 +1,52 @@
-import Constants from 'expo-constants'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { localClient, loadLocalFinance } from './local'
+import type { UploadFile } from './legacyTypes'
 
-const STORAGE_KEY = 'finance.apiBaseUrl'
+const ready = () => loadLocalFinance()
+
+async function fileToText(file: UploadFile) {
+  const res = await fetch(file.uri)
+  return { name: file.name, text: await res.text() }
+}
+
+export const api = {
+  root: 'local',
+  get: async <T,>(path: string) => {
+    await ready()
+    return (await localClient.get(path)) as T
+  },
+  post: async <T,>(path: string, body?: unknown) => {
+    await ready()
+    return (await localClient.post(path, body)) as T
+  },
+  put: async <T,>(path: string, body?: unknown) => {
+    await ready()
+    return (await localClient.put(path, body)) as T
+  },
+  patch: async <T,>(path: string, body?: unknown) => {
+    await ready()
+    return (await localClient.patch(path, body)) as T
+  },
+  upload: async <T,>(path: string, files: UploadFile[]) => {
+    await ready()
+    const payload = await Promise.all(files.map(fileToText))
+    return (await localClient.upload(path, payload)) as T
+  },
+}
+
+export type { UploadFile }
 
 export function suggestedApiBaseUrl() {
-  const hostUri = Constants.expoConfig?.hostUri || Constants.linkingUri || ''
-  const host = hostUri.replace(/^[a-z]+:\/\//, '').split(':')[0].split('/')[0]
-  if (host && host !== 'localhost' && host !== '127.0.0.1') {
-    return `http://${host}:8000`
-  }
-  return 'http://127.0.0.1:8000'
+  return 'local'
 }
 
 export async function loadApiBaseUrl() {
-  const stored = await AsyncStorage.getItem(STORAGE_KEY)
-  return stored || suggestedApiBaseUrl()
+  return 'local'
 }
 
-export async function saveApiBaseUrl(url: string) {
-  await AsyncStorage.setItem(STORAGE_KEY, url.replace(/\/$/, ''))
+export async function saveApiBaseUrl(_url: string) {
+  return
 }
 
-export type UploadFile = {
-  uri: string
-  name: string
-  type?: string
+export function createApi(_baseUrl: string) {
+  return api
 }
-
-async function parseError(res: Response) {
-  const text = await res.text()
-  try {
-    const parsed = JSON.parse(text) as { detail?: string }
-    if (typeof parsed.detail === 'string') return parsed.detail
-  } catch {
-    /* use raw text */
-  }
-  return text || res.statusText
-}
-
-export function createApi(baseUrl: string) {
-  const root = baseUrl.replace(/\/$/, '')
-
-  const json = async <T,>(res: Response): Promise<T> => {
-    if (!res.ok) throw new Error(await parseError(res))
-    return res.json() as Promise<T>
-  }
-
-  return {
-    root,
-    get: <T,>(path: string) => fetch(`${root}${path}`).then((r) => json<T>(r)),
-    post: <T,>(path: string, body?: unknown) =>
-      fetch(`${root}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined,
-      }).then((r) => json<T>(r)),
-    put: <T,>(path: string, body?: unknown) =>
-      fetch(`${root}${path}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined,
-      }).then((r) => json<T>(r)),
-    patch: <T,>(path: string, body?: unknown) =>
-      fetch(`${root}${path}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: body ? JSON.stringify(body) : undefined,
-      }).then((r) => json<T>(r)),
-    upload: <T,>(path: string, files: UploadFile[]) => {
-      const body = new FormData()
-      for (const file of files) {
-        body.append('files', {
-          uri: file.uri,
-          name: file.name,
-          type: file.type || 'text/csv',
-        } as unknown as Blob)
-      }
-      return fetch(`${root}${path}`, { method: 'POST', body }).then((r) => json<T>(r))
-    },
-  }
-}
-
-export type ApiClient = ReturnType<typeof createApi>

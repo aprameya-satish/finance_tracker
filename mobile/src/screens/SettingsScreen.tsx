@@ -1,14 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import * as DocumentPicker from 'expo-document-picker'
+import * as Sharing from 'expo-sharing'
+import { cacheDirectory, writeAsStringAsync } from 'expo-file-system/legacy'
 import { useEffect, useState } from 'react'
 import { Text, View } from 'react-native'
 import { useApp } from '../AppContext'
 import { Card, Eyebrow, Field, PrimaryButton, Screen, Title } from '../components/ui'
-import { createApi, suggestedApiBaseUrl } from '../api'
+import { financeStore } from '../local'
 import { colors } from '../theme'
-import type { Category, Health, Settings } from '../types'
+import type { Category, Settings } from '../../../shared/finance/types.ts'
 
 export default function SettingsScreen() {
-  const { api, baseUrl, setBaseUrl } = useApp()
+  const { api } = useApp()
   const qc = useQueryClient()
   const { data } = useQuery({
     queryKey: ['settings', api.root],
@@ -20,22 +23,16 @@ export default function SettingsScreen() {
   })
   const [personA, setPersonA] = useState('Aprameya')
   const [personS, setPersonS] = useState('Savanthi')
-  const [directory, setDirectory] = useState('')
-  const [url, setUrl] = useState(baseUrl)
   const [health, setHealth] = useState('')
 
-  useEffect(() => {
-    setUrl(baseUrl)
-  }, [baseUrl])
   useEffect(() => {
     if (!data) return
     setPersonA(data.person_a)
     setPersonS(data.person_s)
-    setDirectory(data.csv_import_directory)
   }, [data])
 
   const save = useMutation({
-    mutationFn: () => api.put('/api/settings', { person_a: personA, person_s: personS, csv_import_directory: directory }),
+    mutationFn: () => api.put('/api/settings', { person_a: personA, person_s: personS }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   })
   const toggleBudget = useMutation({
@@ -45,39 +42,40 @@ export default function SettingsScreen() {
 
   return (
     <Screen>
-      <Eyebrow>Household</Eyebrow>
+      <Eyebrow>On this phone</Eyebrow>
       <Title>Settings</Title>
-      <Field label="API URL" value={url} onChangeText={setUrl} keyboardType="url" placeholder={suggestedApiBaseUrl()} />
-      <View style={{ height: 10 }} />
-      <PrimaryButton
-        label="Save & test connection"
-        onPress={async () => {
-          await setBaseUrl(url)
-          try {
-            const res = await createApi(url).get<Health>('/api/health')
-            setHealth(res.ok ? `Connected · Plaid ${res.plaid_configured ? 'on' : 'off'}` : 'Unexpected health response')
-          } catch (err) {
-            setHealth(err instanceof Error ? err.message : 'Could not reach API')
-          }
-        }}
-      />
-      {!!health && <Text style={{ color: colors.muted, marginTop: 8 }}>{health}</Text>}
-      <Text style={{ color: colors.muted, marginTop: 8, marginBottom: 20 }}>
-        On a physical iPhone, use your computer’s LAN address and run the API with `--host 0.0.0.0`.
+      <Text style={{ color: colors.muted, marginBottom: 16, lineHeight: 20 }}>
+        Data stays on this iPhone. No computer or server is required. Export a backup if you change phones.
       </Text>
-
       <Field label="Person A" value={personA} onChangeText={setPersonA} />
       <View style={{ height: 10 }} />
       <Field label="Person S" value={personS} onChangeText={setPersonS} />
-      <View style={{ height: 10 }} />
-      <Field label="Default CSV directory" value={directory} onChangeText={setDirectory} />
       <View style={{ height: 12 }} />
       <PrimaryButton label={save.isPending ? 'Saving…' : 'Save household'} onPress={() => save.mutate()} />
-
-      <Text style={{ color: colors.muted, marginTop: 24, marginBottom: 8 }}>
-        {data?.plaid_configured ? `Plaid configured (${data.plaid_env})` : 'Plaid is not configured. Keys stay in the backend .env.'}
-      </Text>
-      <Text style={{ color: colors.muted, fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 16, marginBottom: 8 }}>
+      <View style={{ height: 16 }} />
+      <PrimaryButton
+        label="Export backup"
+        onPress={async () => {
+          const dest = `${cacheDirectory}finance-backup.json`
+          await writeAsStringAsync(dest, financeStore.exportJson())
+          if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(dest)
+          setHealth('Backup ready to share.')
+        }}
+      />
+      <View style={{ height: 10 }} />
+      <PrimaryButton
+        label="Restore backup"
+        onPress={async () => {
+          const picked = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true })
+          if (picked.canceled || !picked.assets[0]) return
+          const text = await (await fetch(picked.assets[0].uri)).text()
+          await financeStore.importJson(text)
+          qc.invalidateQueries()
+          setHealth('Backup restored.')
+        }}
+      />
+      {!!health && <Text style={{ color: colors.muted, marginTop: 8 }}>{health}</Text>}
+      <Text style={{ color: colors.muted, fontSize: 12, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: 24, marginBottom: 8 }}>
         Categories
       </Text>
       {categories.map((c) => (

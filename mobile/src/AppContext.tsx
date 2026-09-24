@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { createApi, loadApiBaseUrl, saveApiBaseUrl, suggestedApiBaseUrl, type ApiClient } from './api'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { api } from './api'
+import { loadLocalFinance } from './local'
 
 type Ctx = {
-  api: ApiClient
+  api: typeof api
   baseUrl: string
   ready: boolean
   setBaseUrl: (url: string) => Promise<void>
@@ -16,39 +17,32 @@ type Ctx = {
 const AppContext = createContext<Ctx | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [baseUrl, setBaseUrlState] = useState(suggestedApiBaseUrl())
   const [ready, setReady] = useState(false)
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
   const [includePending, setIncludePending] = useState(false)
   const [queryClient] = useState(() => new QueryClient())
-  const api = useMemo(() => createApi(baseUrl), [baseUrl])
 
   useEffect(() => {
-    loadApiBaseUrl().then((url) => {
-      setBaseUrlState(url)
-      setReady(true)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!ready) return
-    api
-      .get<{ year_month: string }>('/api/reports/latest-month')
+    loadLocalFinance()
+      .then(() => api.get<{ year_month: string }>('/api/reports/latest-month'))
       .then((data) => setMonth(data.year_month))
       .catch(() => undefined)
-  }, [api, ready])
-
-  const setBaseUrl = async (url: string) => {
-    const cleaned = url.trim().replace(/\/$/, '')
-    await saveApiBaseUrl(cleaned)
-    setBaseUrlState(cleaned)
-    queryClient.clear()
-  }
+      .finally(() => setReady(true))
+  }, [])
 
   return (
     <QueryClientProvider client={queryClient}>
       <AppContext.Provider
-        value={{ api, baseUrl, ready, setBaseUrl, month, setMonth, includePending, setIncludePending }}
+        value={{
+          api,
+          baseUrl: 'on-device',
+          ready,
+          setBaseUrl: async () => undefined,
+          month,
+          setMonth,
+          includePending,
+          setIncludePending,
+        }}
       >
         {children}
       </AppContext.Provider>

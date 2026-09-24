@@ -31,6 +31,9 @@ export default function Dashboard() {
 
   return (
     <div>
+      <p className="md:hidden text-sm text-[var(--muted)] mb-4 leading-relaxed">
+        Safari → Share → Add to Home Screen to keep this app on your iPhone. Data stays on the phone.
+      </p>
       <header className="flex items-end justify-between mb-10 gap-4">
         <div>
           <div className="text-[var(--muted)] text-sm mb-2">This month</div>

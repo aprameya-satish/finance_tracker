@@ -15,7 +15,7 @@ const client = new QueryClient()
 export default function App() {
   return (
     <QueryClientProvider client={client}>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}>
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />

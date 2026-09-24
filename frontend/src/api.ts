@@ -1,44 +1,35 @@
-const json = async <T,>(res: Response): Promise<T> => {
-  if (!res.ok) {
-    const text = await res.text()
-    try {
-      const parsed = JSON.parse(text) as { detail?: string }
-      if (typeof parsed.detail === 'string') throw new Error(parsed.detail)
-    } catch (err) {
-      if (err instanceof SyntaxError) throw new Error(text || res.statusText)
-      throw err
-    }
-    throw new Error(text || res.statusText)
-  }
-  return res.json() as Promise<T>
-}
+import { localClient, loadLocalFinance } from './local'
+import type { ImportResult } from '../../shared/finance/types.ts'
+
+const ready = () => loadLocalFinance()
 
 export const api = {
-  get: <T,>(path: string) => fetch(path).then((r) => json<T>(r)),
-  post: <T,>(path: string, body?: unknown) =>
-    fetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
-    }).then((r) => json<T>(r)),
-  put: <T,>(path: string, body?: unknown) =>
-    fetch(path, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
-    }).then((r) => json<T>(r)),
-  patch: <T,>(path: string, body?: unknown) =>
-    fetch(path, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: body ? JSON.stringify(body) : undefined,
-    }).then((r) => json<T>(r)),
-  upload: <T,>(path: string, files: File[]) => {
-    const body = new FormData()
-    for (const file of files) body.append('files', file)
-    return fetch(path, { method: 'POST', body }).then((r) => json<T>(r))
+  get: async <T,>(path: string) => {
+    await ready()
+    return (await localClient.get(path)) as T
+  },
+  post: async <T,>(path: string, body?: unknown) => {
+    await ready()
+    return (await localClient.post(path, body)) as T
+  },
+  put: async <T,>(path: string, body?: unknown) => {
+    await ready()
+    return (await localClient.put(path, body)) as T
+  },
+  patch: async <T,>(path: string, body?: unknown) => {
+    await ready()
+    return (await localClient.patch(path, body)) as T
+  },
+  upload: async <T,>(path: string, files: File[]) => {
+    await ready()
+    const payload = await Promise.all(
+      files.map(async (file) => ({ name: file.name, text: await file.text() })),
+    )
+    return (await localClient.upload(path, payload)) as T
   },
 }
+
+export type { ImportResult }
 
 export type Transaction = {
   id: number

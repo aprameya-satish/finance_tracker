@@ -1,13 +1,16 @@
-import { cacheDirectory, downloadAsync } from 'expo-file-system/legacy'
+import { cacheDirectory, writeAsStringAsync } from 'expo-file-system/legacy'
 import * as Sharing from 'expo-sharing'
+import { api } from './api'
+import { money } from './money'
+import type { MonthReport } from '../../shared/finance/types.ts'
 
-export async function shareMonthPdf(baseUrl: string, month: string, includePending: boolean) {
+export async function shareMonthPdf(_baseUrl: string, month: string, includePending: boolean) {
   const suffix = includePending ? '?include_pending=true' : ''
-  const url = `${baseUrl.replace(/\/$/, '')}/api/reports/month/${month}/pdf${suffix}`
-  const dest = `${cacheDirectory}finance-report-${month}.pdf`
-  const result = await downloadAsync(url, dest)
-  if (result.status !== 200) throw new Error('PDF download failed')
+  const report = await api.get<MonthReport>(`/api/reports/month/${month}${suffix}`)
+  const html = `<h1>${month}</h1><p>Total ${money(report.total_cents)}</p>`
+  const dest = `${cacheDirectory}finance-report-${month}.html`
+  await writeAsStringAsync(dest, html)
   if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(result.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' })
+    await Sharing.shareAsync(dest, { mimeType: 'text/html' })
   }
 }
