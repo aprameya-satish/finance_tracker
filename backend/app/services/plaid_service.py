@@ -43,7 +43,7 @@ def plaid_configured() -> bool:
     return bool(s.plaid_client_id and s.plaid_secret)
 
 
-def create_link_token() -> str:
+def create_link_token(redirect_uri: str | None = None) -> str:
     from plaid.model.country_code import CountryCode
     from plaid.model.link_token_create_request import LinkTokenCreateRequest
     from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
@@ -60,6 +60,9 @@ def create_link_token() -> str:
         country_codes=countries,
         language=settings.plaid_language,
     )
+    uri = (redirect_uri or settings.plaid_redirect_uri or "").strip()
+    if uri:
+        kwargs["redirect_uri"] = uri
     try:
         from plaid.model.link_token_create_request_transactions import LinkTokenCreateRequestTransactions
 
@@ -122,14 +125,24 @@ def exchange_public_token(db: Session, public_token: str) -> PlaidItem:
 
     accounts_resp = client.accounts_get(AccountsGetRequest(access_token=access_token))
     inst_name = "Plaid"
+    inst_id = None
     try:
-        inst_name = accounts_resp["item"]["institution_id"] or "Plaid"
+        inst_id = accounts_resp["item"].get("institution_id")
+        inst_name = accounts_resp["item"].get("institution_name") or inst_id or "Plaid"
     except Exception:
         pass
-    try:
-        inst_name = getattr(accounts_resp, "item", None) and accounts_resp["item"].get("institution_name") or inst_name
-    except Exception:
-        pass
+    if inst_id and (not inst_name or inst_name == inst_id):
+        try:
+            from plaid.model.country_code import CountryCode
+            from plaid.model.institutions_get_by_id_request import InstitutionsGetByIdRequest
+
+            countries = [CountryCode(c) for c in settings.plaid_country_codes.split(",") if c.strip()]
+            inst_resp = client.institutions_get_by_id(
+                InstitutionsGetByIdRequest(institution_id=inst_id, country_codes=countries)
+            )
+            inst_name = inst_resp["institution"]["name"]
+        except Exception:
+            pass
     item.institution_name = str(inst_name)
     institution = _institution_for_plaid(db, item.institution_name or "Plaid")
     for acct in accounts_resp["accounts"]:
@@ -273,3 +286,65 @@ def sync_all(db: Session) -> dict:
         except Exception as exc:  # noqa: BLE001
             totals["errors"].append(f"{item.item_id}: {exc}")
     return totals
+
+
+def build_snapshot(db: Session) -> dict:
+    items = db.query(PlaidItem).all()
+    accounts = db.query(Account).filter(Account.plaid_account_id.isnot(None)).all()
+    account_ids = [a.id for a in accounts]
+    txns = []
+    if account_ids:
+        txns = (
+            db.query(Transaction)
+            .filter(Transaction.account_id.in_(account_ids), Transaction.source == "plaid")
+            .order_by(Transaction.date.desc(), Transaction.id.desc())
+            .all()
+        )
+    plaid_by_account = {a.id: a.plaid_account_id for a in accounts}
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "item_id": r.item_id,
+                "institution_name": r.institution_name,
+                "status": r.status,
+                "products": r.products or [],
+                "last_synced_at": r.last_synced_at.isoformat() if r.last_synced_at else None,
+            }
+            for r in items
+        ],
+        "accounts": [
+            {
+                "plaid_account_id": a.plaid_account_id,
+                "plaid_item_id": a.plaid_item_id,
+                "name": a.name,
+                "last4": a.last4,
+                "kind": a.kind,
+                "institution": a.institution.name if a.institution else "",
+                "is_active": a.is_active,
+            }
+            for a in accounts
+            if a.plaid_account_id
+        ],
+        "transactions": [
+            {
+                "external_id": t.external_id,
+                "plaid_account_id": plaid_by_account.get(t.account_id),
+                "date": t.date.isoformat() if t.date else None,
+                "description": t.description_raw,
+                "merchant_norm": t.merchant_norm,
+                "amount_cents": t.amount_cents,
+                "txn_kind": t.txn_kind,
+                "pending": t.pending,
+                "who": t.who,
+                "who_source": t.who_source,
+                "category": t.category.name if t.category else None,
+                "category_source": t.category_source,
+                "category_confidence": t.category_confidence,
+                "notes": t.notes,
+                "plaid_pfc_primary": t.plaid_pfc_primary,
+            }
+            for t in txns
+            if plaid_by_account.get(t.account_id)
+        ],
+    }

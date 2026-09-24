@@ -16,7 +16,10 @@ class Settings(BaseSettings):
 
     host: str = "127.0.0.1"
     port: int = 8000
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "https://aprameya-satish.github.io"
+    )
     database_url: str = "sqlite:///./data/finance.db"
     plaid_token_key: str = ""
     plaid_client_id: str = ""
@@ -25,6 +28,8 @@ class Settings(BaseSettings):
     plaid_products: str = "transactions"
     plaid_country_codes: str = "US"
     plaid_language: str = "en"
+    plaid_redirect_uri: str = ""
+    api_shared_secret: str = ""
     csv_import_directory: str = ""
     plaid_sync_interval_hours: int = 6
 

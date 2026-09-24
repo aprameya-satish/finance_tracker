@@ -16,15 +16,42 @@ export default function SettingsPage() {
   })
   const [personA, setPersonA] = useState('Aprameya')
   const [personS, setPersonS] = useState('Savanthi')
+  const [plaidUrl, setPlaidUrl] = useState('')
+  const [plaidKey, setPlaidKey] = useState('')
   const [message, setMessage] = useState('')
   useEffect(() => {
     if (!data) return
     setPersonA(data.person_a)
     setPersonS(data.person_s)
+    setPlaidUrl(data.plaid_api_url || '')
+    setPlaidKey(data.plaid_api_key || '')
   }, [data])
   const save = useMutation({
-    mutationFn: () => api.put('/api/settings', { person_a: personA, person_s: personS }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    mutationFn: () =>
+      api.put('/api/settings', {
+        person_a: personA,
+        person_s: personS,
+        plaid_api_url: plaidUrl,
+        plaid_api_key: plaidKey,
+      }),
+    onSuccess: () => {
+      setMessage('Saved.')
+      qc.invalidateQueries()
+    },
+    onError: (err: Error) => setMessage(err.message),
+  })
+  const ping = useMutation({
+    mutationFn: async () => {
+      await api.put('/api/settings', { plaid_api_url: plaidUrl, plaid_api_key: plaidKey })
+      return api.get<Settings>('/api/settings')
+    },
+    onSuccess: (next) => {
+      qc.invalidateQueries()
+      if (next.plaid_env === 'unreachable') setMessage('Saved, but the hosted API did not respond.')
+      else if (!next.plaid_configured) setMessage(`Reached ${next.plaid_env}, but Plaid keys are not set on the server.`)
+      else setMessage(`Plaid ready (${next.plaid_env}). Link a bank from Accounts.`)
+    },
+    onError: (err: Error) => setMessage(err.message),
   })
   const toggleBudget = useMutation({
     mutationFn: (c: Category) => api.patch(`/api/categories/${c.id}`, { include_in_budget: !c.include_in_budget }),
@@ -49,9 +76,39 @@ export default function SettingsPage() {
           Person S
           <input className="block w-full mt-1" value={personS} onChange={(e) => setPersonS(e.target.value)} />
         </label>
-        <button className="rounded-lg bg-white text-black px-4 py-2 text-sm w-fit" onClick={() => save.mutate()}>
-          Save
-        </button>
+        <label className="text-sm text-[var(--muted)]">
+          Plaid API URL
+          <input
+            className="block w-full mt-1"
+            value={plaidUrl}
+            onChange={(e) => setPlaidUrl(e.target.value)}
+            placeholder="https://your-api.onrender.com"
+            inputMode="url"
+            autoCapitalize="none"
+          />
+        </label>
+        <label className="text-sm text-[var(--muted)]">
+          API key (optional)
+          <input
+            className="block w-full mt-1"
+            value={plaidKey}
+            onChange={(e) => setPlaidKey(e.target.value)}
+            placeholder="X-Finance-Key if the host requires one"
+            autoCapitalize="none"
+          />
+        </label>
+        <p className="text-sm text-[var(--muted)]">
+          Plaid secrets stay on the hosted API. This phone only stores the URL
+          {data?.plaid_configured ? ` · ready (${data.plaid_env})` : data?.plaid_api_url ? ` · ${data.plaid_env}` : ''}.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button className="rounded-lg bg-white text-black px-4 py-2 text-sm w-fit" onClick={() => save.mutate()}>
+            Save
+          </button>
+          <button className="rounded-lg border border-[var(--border)] px-4 py-2 text-sm w-fit" onClick={() => ping.mutate()}>
+            {ping.isPending ? 'Checking…' : 'Test Plaid API'}
+          </button>
+        </div>
       </div>
       <h2 className="text-sm uppercase tracking-widest text-[var(--muted)] mb-3">Backup</h2>
       <div className="flex flex-wrap gap-3 mb-3">
